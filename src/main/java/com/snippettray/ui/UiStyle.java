@@ -1,0 +1,89 @@
+package com.snippettray.ui;
+
+import javax.swing.AbstractButton;
+import javax.swing.BorderFactory;
+import javax.swing.JComponent;
+import javax.swing.JScrollPane;
+import javax.swing.JTable;
+import javax.swing.JTextArea;
+import javax.swing.JTextField;
+import javax.swing.JList;
+import javax.swing.UIManager;
+import javax.swing.UnsupportedLookAndFeelException;
+import javax.swing.border.Border;
+import java.awt.Color;
+import java.awt.Dimension;
+import java.awt.Insets;
+
+public final class UiStyle {
+    private static final Color BORDER_COLOR = new Color(196, 204, 214);
+    private static final Color INPUT_BACKGROUND = new Color(255, 255, 255);
+    private static final Color BUTTON_BACKGROUND = new Color(246, 248, 251);
+    private static final Color TABLE_GRID = new Color(230, 234, 240);
+    private static final int BUTTON_HEIGHT = 34;
+
+    private UiStyle() {
+    }
+
+    public static void configureLookAndFeel() {
+        try {
+            UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+        } catch (ClassNotFoundException | InstantiationException | IllegalAccessException | UnsupportedLookAndFeelException ignored) {
+        }
+    }
+
+    public static Border paddedLineBorder() {
+        return BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(BORDER_COLOR, 1),
+                BorderFactory.createEmptyBorder(7, 9, 7, 9)
+        );
+    }
+
+    public static void styleTextField(JTextField textField) {
+        textField.setBorder(paddedLineBorder());
+        textField.setBackground(INPUT_BACKGROUND);
+    }
+
+    public static void styleTextArea(JTextArea textArea) {
+        textArea.setBorder(paddedLineBorder());
+        textArea.setBackground(INPUT_BACKGROUND);
+        textArea.setMargin(new Insets(4, 4, 4, 4));
+    }
+
+    public static void styleButton(AbstractButton button) {
+        button.setFocusPainted(false);
+        button.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(BORDER_COLOR, 1),
+                BorderFactory.createEmptyBorder(8, 12, 8, 12)
+        ));
+        button.setBackground(BUTTON_BACKGROUND);
+        button.setOpaque(true);
+        button.setContentAreaFilled(true);
+        button.setMargin(new Insets(7, 12, 7, 12));
+
+        Dimension preferred = button.getPreferredSize();
+        button.setPreferredSize(new Dimension(preferred.width, BUTTON_HEIGHT));
+    }
+
+    public static void styleList(JList<?> list) {
+        list.setBorder(BorderFactory.createLineBorder(BORDER_COLOR, 1));
+        list.setBackground(INPUT_BACKGROUND);
+        list.setFixedCellHeight(24);
+    }
+
+    public static void styleTable(JTable table) {
+        table.setRowHeight(30);
+        table.setShowHorizontalLines(true);
+        table.setShowVerticalLines(false);
+        table.setGridColor(TABLE_GRID);
+        table.setIntercellSpacing(new java.awt.Dimension(0, 1));
+    }
+
+    public static void styleScrollPane(JScrollPane scrollPane) {
+        scrollPane.setBorder(BorderFactory.createLineBorder(BORDER_COLOR, 1));
+    }
+
+    public static void addPanelPadding(JComponent component, int top, int left, int bottom, int right) {
+        component.setBorder(BorderFactory.createEmptyBorder(top, left, bottom, right));
+    }
+}
