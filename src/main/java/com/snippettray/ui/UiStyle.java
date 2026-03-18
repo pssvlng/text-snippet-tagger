@@ -26,6 +26,10 @@ public final class UiStyle {
     private static final Color INPUT_BACKGROUND = new Color(255, 255, 255);
     private static final Color BUTTON_BACKGROUND = new Color(246, 248, 251);
     private static final Color TABLE_GRID = new Color(230, 234, 240);
+    private static final Color TEXT_COLOR = new Color(33, 37, 41);
+    private static final Color MUTED_TEXT_COLOR = new Color(64, 72, 84);
+    private static final Color SELECTION_BACKGROUND = new Color(44, 108, 194);
+    private static final Color SELECTION_TEXT = new Color(255, 255, 255);
     private static final int BUTTON_HEIGHT = 34;
 
     private UiStyle() {
@@ -87,11 +91,19 @@ public final class UiStyle {
     public static void styleTextField(JTextField textField) {
         textField.setBorder(paddedLineBorder());
         textField.setBackground(INPUT_BACKGROUND);
+        textField.setForeground(TEXT_COLOR);
+        textField.setCaretColor(TEXT_COLOR);
+        textField.setSelectionColor(SELECTION_BACKGROUND);
+        textField.setSelectedTextColor(SELECTION_TEXT);
     }
 
     public static void styleTextArea(JTextArea textArea) {
         textArea.setBorder(paddedLineBorder());
         textArea.setBackground(INPUT_BACKGROUND);
+        textArea.setForeground(TEXT_COLOR);
+        textArea.setCaretColor(TEXT_COLOR);
+        textArea.setSelectionColor(SELECTION_BACKGROUND);
+        textArea.setSelectedTextColor(SELECTION_TEXT);
         textArea.setMargin(new Insets(4, 4, 4, 4));
     }
 
@@ -102,6 +114,7 @@ public final class UiStyle {
                 BorderFactory.createEmptyBorder(8, 12, 8, 12)
         ));
         button.setBackground(BUTTON_BACKGROUND);
+        button.setForeground(MUTED_TEXT_COLOR);
         button.setOpaque(true);
         button.setContentAreaFilled(true);
         button.setMargin(new Insets(7, 12, 7, 12));
@@ -113,6 +126,9 @@ public final class UiStyle {
     public static void styleList(JList<?> list) {
         list.setBorder(BorderFactory.createLineBorder(BORDER_COLOR, 1));
         list.setBackground(INPUT_BACKGROUND);
+        list.setForeground(TEXT_COLOR);
+        list.setSelectionBackground(SELECTION_BACKGROUND);
+        list.setSelectionForeground(SELECTION_TEXT);
         list.setFixedCellHeight(24);
     }
 
@@ -122,6 +138,10 @@ public final class UiStyle {
         table.setShowVerticalLines(false);
         table.setGridColor(TABLE_GRID);
         table.setIntercellSpacing(new java.awt.Dimension(0, 1));
+        table.setBackground(INPUT_BACKGROUND);
+        table.setForeground(TEXT_COLOR);
+        table.setSelectionBackground(SELECTION_BACKGROUND);
+        table.setSelectionForeground(SELECTION_TEXT);
     }
 
     public static void styleScrollPane(JScrollPane scrollPane) {
