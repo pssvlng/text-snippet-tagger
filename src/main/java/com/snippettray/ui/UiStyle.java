@@ -24,10 +24,8 @@ import java.util.Set;
 public final class UiStyle {
     private static final Color BORDER_COLOR = new Color(196, 204, 214);
     private static final Color INPUT_BACKGROUND = new Color(255, 255, 255);
-    private static final Color BUTTON_BACKGROUND = new Color(246, 248, 251);
     private static final Color TABLE_GRID = new Color(230, 234, 240);
     private static final Color TEXT_COLOR = new Color(33, 37, 41);
-    private static final Color MUTED_TEXT_COLOR = new Color(64, 72, 84);
     private static final Color SELECTION_BACKGROUND = new Color(44, 108, 194);
     private static final Color SELECTION_TEXT = new Color(255, 255, 255);
     private static final int BUTTON_HEIGHT = 34;
@@ -113,10 +111,6 @@ public final class UiStyle {
                 BorderFactory.createLineBorder(BORDER_COLOR, 1),
                 BorderFactory.createEmptyBorder(8, 12, 8, 12)
         ));
-        button.setBackground(BUTTON_BACKGROUND);
-        button.setForeground(MUTED_TEXT_COLOR);
-        button.setOpaque(true);
-        button.setContentAreaFilled(true);
         button.setMargin(new Insets(7, 12, 7, 12));
 
         Dimension preferred = button.getPreferredSize();
