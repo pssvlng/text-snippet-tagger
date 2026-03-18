@@ -7,6 +7,8 @@ import com.snippettray.service.SnippetService;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JDialog;
+import javax.swing.Icon;
+import javax.swing.ImageIcon;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
@@ -16,17 +18,26 @@ import javax.swing.JTable;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.ListSelectionModel;
+import javax.swing.SwingConstants;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
+import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
+import java.awt.BasicStroke;
 import java.awt.BorderLayout;
+import java.awt.Color;
 import java.awt.Component;
 import java.awt.Container;
 import java.awt.Dialog;
 import java.awt.FlowLayout;
 import java.awt.FocusTraversalPolicy;
+import java.awt.Frame;
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
+import java.awt.Window;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.image.BufferedImage;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -34,20 +45,48 @@ import java.util.List;
 
 public final class SearchWindow extends JDialog {
     private static final String ALL_TAGS = "All tags";
-    private static final int DELETE_COLUMN_INDEX = 4;
+    private static final int ACTIONS_COLUMN_INDEX = 4;
+    private static final int ACTION_ICON_SIZE = 12;
+    private static final int ACTION_ICON_GAP = 8;
+    private static final int ACTION_ICON_PADDING = 4;
+    private static final int ACTIONS_ICON_WIDTH = ACTION_ICON_SIZE * 2 + ACTION_ICON_GAP + ACTION_ICON_PADDING * 2;
+    private static final int ACTIONS_ICON_HEIGHT = ACTION_ICON_SIZE + ACTION_ICON_PADDING * 2;
+    private static final int ACTIONS_COLUMN_WIDTH = ACTIONS_ICON_WIDTH + 20;
+    private static final Icon ACTIONS_ICON = createActionsIcon();
 
     private final SnippetService service;
-    private final JComboBox<String> tagFilter;
+    private JComboBox<String> tagFilter;
     private final List<Tag> tags = new ArrayList<>();
-    private final JTextField searchField;
-    private final JTable resultsTable;
-    private final DefaultTableModel tableModel;
-    private final JTextArea detailsArea;
+    private JTextField searchField;
+    private JTable resultsTable;
+    private DefaultTableModel tableModel;
+    private JTextArea detailsArea;
     private List<SnippetResult> currentResults = new ArrayList<>();
 
     public SearchWindow(SnippetService service) {
-        super((java.awt.Frame) null, "Snippet Search", true);
+        this((Frame) null, service);
+    }
+
+    public SearchWindow(Frame parent, SnippetService service) {
+        super(parent, "Snippet Search", true);
         this.service = service;
+        initialize();
+    }
+
+    public SearchWindow(Dialog parent, SnippetService service) {
+        super(parent, "Snippet Search", true);
+        this.service = service;
+        initialize();
+    }
+
+    public static SearchWindow create(Window parent, SnippetService service) {
+        if (parent instanceof Dialog dialogParent) {
+            return new SearchWindow(dialogParent, service);
+        }
+        return new SearchWindow((Frame) parent, service);
+    }
+
+    private void initialize() {
         setIconImage(AppAssets.appImage());
         setModalityType(Dialog.ModalityType.APPLICATION_MODAL);
         setAlwaysOnTop(true);
@@ -75,6 +114,7 @@ public final class SearchWindow extends JDialog {
         UiStyle.styleButton(addSnippetButton);
         addSnippetButton.addActionListener(event -> {
             AddSnippetDialog.showDialog(this, service);
+            loadTags();
             refreshResults();
         });
 
@@ -100,19 +140,49 @@ public final class SearchWindow extends JDialog {
         toolbar.add(addSnippetButton);
         toolbar.add(closeButton);
 
-        tableModel = new DefaultTableModel(new Object[]{"Title", "Snippet", "Tags", "Created", "Delete"}, 0) {
+        tableModel = new DefaultTableModel(new Object[]{"Title", "Snippet", "Tags", "Created", "Actions"}, 0) {
             @Override
             public boolean isCellEditable(int row, int column) {
                 return false;
             }
         };
 
-        resultsTable = new JTable(tableModel);
+        resultsTable = new JTable(tableModel) {
+            @Override
+            public String getToolTipText(MouseEvent event) {
+                int row = rowAtPoint(event.getPoint());
+                int column = columnAtPoint(event.getPoint());
+                if (row < 0) {
+                    return null;
+                }
+                if (column == ACTIONS_COLUMN_INDEX) {
+                    return isDeleteActionClick(event) ? "Delete snippet" : "Edit snippet";
+                }
+                return null;
+            }
+        };
         UiStyle.styleTable(resultsTable);
         resultsTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        resultsTable.getColumnModel().getColumn(DELETE_COLUMN_INDEX).setMinWidth(70);
-        resultsTable.getColumnModel().getColumn(DELETE_COLUMN_INDEX).setMaxWidth(70);
-        resultsTable.getColumnModel().getColumn(DELETE_COLUMN_INDEX).setPreferredWidth(70);
+        resultsTable.getColumnModel().getColumn(ACTIONS_COLUMN_INDEX).setMinWidth(ACTIONS_COLUMN_WIDTH);
+        resultsTable.getColumnModel().getColumn(ACTIONS_COLUMN_INDEX).setMaxWidth(ACTIONS_COLUMN_WIDTH);
+        resultsTable.getColumnModel().getColumn(ACTIONS_COLUMN_INDEX).setPreferredWidth(ACTIONS_COLUMN_WIDTH);
+        DefaultTableCellRenderer actionsRenderer = new DefaultTableCellRenderer() {
+            @Override
+            public Component getTableCellRendererComponent(
+                    JTable table,
+                    Object value,
+                    boolean isSelected,
+                    boolean hasFocus,
+                    int row,
+                    int column
+            ) {
+                JLabel label = (JLabel) super.getTableCellRendererComponent(table, "", isSelected, hasFocus, row, column);
+                label.setHorizontalAlignment(SwingConstants.CENTER);
+                label.setIcon(ACTIONS_ICON);
+                return label;
+            }
+        };
+        resultsTable.getColumnModel().getColumn(ACTIONS_COLUMN_INDEX).setCellRenderer(actionsRenderer);
 
         detailsArea = new JTextArea();
         detailsArea.setEditable(false);
@@ -161,10 +231,16 @@ public final class SearchWindow extends JDialog {
             public void mouseClicked(MouseEvent event) {
                 int row = resultsTable.rowAtPoint(event.getPoint());
                 int column = resultsTable.columnAtPoint(event.getPoint());
-                if (row < 0 || column != DELETE_COLUMN_INDEX) {
+                if (row < 0) {
                     return;
                 }
-                deleteSnippetAt(row);
+                if (column == ACTIONS_COLUMN_INDEX) {
+                    if (isDeleteActionClick(event)) {
+                        deleteSnippetAt(row);
+                        return;
+                    }
+                    editSnippetAt(row);
+                }
             }
         });
 
@@ -232,7 +308,7 @@ public final class SearchWindow extends JDialog {
                         preview(result.content()),
                         result.tagsCsv(),
                         result.createdAt(),
-                        "🗑"
+                        ""
                 });
             }
 
@@ -300,12 +376,83 @@ public final class SearchWindow extends JDialog {
         }
     }
 
+    private void editSnippetAt(int row) {
+        if (row < 0 || row >= currentResults.size()) {
+            return;
+        }
+
+        try {
+            SnippetResult snippetResult = currentResults.get(row);
+            List<Integer> tagIds = service.getSnippetTagIds(snippetResult.id());
+            AddSnippetDialog.showEditDialog(this, service, snippetResult, tagIds);
+            loadTags();
+            refreshResults();
+        } catch (SQLException exception) {
+            JOptionPane.showMessageDialog(this, exception.getMessage(), "Unable to edit snippet", JOptionPane.ERROR_MESSAGE, AppAssets.appImageIcon());
+        }
+    }
+
     private static String preview(String content) {
         String singleLine = content.replace('\n', ' ').replace('\r', ' ').trim();
         if (singleLine.length() <= 90) {
             return singleLine;
         }
         return singleLine.substring(0, 90) + "…";
+    }
+
+    private boolean isDeleteActionClick(MouseEvent event) {
+        int row = resultsTable.rowAtPoint(event.getPoint());
+        int column = resultsTable.columnAtPoint(event.getPoint());
+        if (row < 0 || column != ACTIONS_COLUMN_INDEX) {
+            return false;
+        }
+
+        java.awt.Rectangle cell = resultsTable.getCellRect(row, column, false);
+        int xInCell = event.getX() - cell.x;
+        int iconsStartX = Math.max((cell.width - ACTIONS_ICON_WIDTH) / 2, 0);
+        int deleteStartX = iconsStartX + ACTION_ICON_PADDING + ACTION_ICON_SIZE + ACTION_ICON_GAP;
+        int deleteEndX = deleteStartX + ACTION_ICON_SIZE;
+        return xInCell >= deleteStartX && xInCell <= deleteEndX;
+    }
+
+    private static Icon createActionsIcon() {
+        BufferedImage image = new BufferedImage(ACTIONS_ICON_WIDTH, ACTIONS_ICON_HEIGHT, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D graphics = image.createGraphics();
+        graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        graphics.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE);
+
+        int editX = ACTION_ICON_PADDING;
+        int iconTop = ACTION_ICON_PADDING;
+        drawEditIcon(graphics, editX, iconTop);
+
+        int deleteX = ACTION_ICON_PADDING + ACTION_ICON_SIZE + ACTION_ICON_GAP;
+        drawDeleteIcon(graphics, deleteX, iconTop);
+
+        graphics.dispose();
+        return new ImageIcon(image);
+    }
+
+    private static void drawEditIcon(Graphics2D graphics, int x, int y) {
+        graphics.setColor(new Color(76, 90, 106));
+        graphics.setStroke(new BasicStroke(2f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        graphics.drawLine(x + 2, y + ACTION_ICON_SIZE - 3, x + ACTION_ICON_SIZE - 4, y + 3);
+
+        int[] tipX = {x + ACTION_ICON_SIZE - 5, x + ACTION_ICON_SIZE - 2, x + ACTION_ICON_SIZE - 4};
+        int[] tipY = {y + 2, y + 4, y + 6};
+        graphics.fillPolygon(tipX, tipY, 3);
+
+        graphics.setStroke(new BasicStroke(1.6f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        graphics.drawLine(x + 2, y + ACTION_ICON_SIZE - 2, x + 5, y + ACTION_ICON_SIZE - 2);
+    }
+
+    private static void drawDeleteIcon(Graphics2D graphics, int x, int y) {
+        graphics.setColor(new Color(138, 83, 83));
+        graphics.setStroke(new BasicStroke(1.6f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        graphics.drawRoundRect(x + 3, y + 4, ACTION_ICON_SIZE - 6, ACTION_ICON_SIZE - 4, 2, 2);
+        graphics.drawLine(x + 2, y + 4, x + ACTION_ICON_SIZE - 2, y + 4);
+        graphics.drawLine(x + 5, y + 2, x + ACTION_ICON_SIZE - 5, y + 2);
+        graphics.drawLine(x + 6, y + 6, x + 6, y + ACTION_ICON_SIZE - 2);
+        graphics.drawLine(x + ACTION_ICON_SIZE - 6, y + 6, x + ACTION_ICON_SIZE - 6, y + ACTION_ICON_SIZE - 2);
     }
 
     private static final class OrderedFocusTraversalPolicy extends FocusTraversalPolicy {

@@ -10,10 +10,16 @@ import javax.swing.JTextField;
 import javax.swing.JList;
 import javax.swing.UIManager;
 import javax.swing.UnsupportedLookAndFeelException;
+import javax.swing.plaf.FontUIResource;
 import javax.swing.border.Border;
 import java.awt.Color;
 import java.awt.Dimension;
+import java.awt.Font;
+import java.awt.GraphicsEnvironment;
 import java.awt.Insets;
+import java.util.Enumeration;
+import java.util.HashSet;
+import java.util.Set;
 
 public final class UiStyle {
     private static final Color BORDER_COLOR = new Color(196, 204, 214);
@@ -30,6 +36,45 @@ public final class UiStyle {
             UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
         } catch (ClassNotFoundException | InstantiationException | IllegalAccessException | UnsupportedLookAndFeelException ignored) {
         }
+        applyGlobalFont();
+    }
+
+    private static void applyGlobalFont() {
+        FontUIResource fontResource = new FontUIResource(resolvePreferredUiFont());
+        Enumeration<Object> keys = UIManager.getDefaults().keys();
+        while (keys.hasMoreElements()) {
+            Object key = keys.nextElement();
+            Object value = UIManager.get(key);
+            if (value instanceof FontUIResource) {
+                UIManager.put(key, fontResource);
+            }
+        }
+    }
+
+    private static Font resolvePreferredUiFont() {
+        String[] preferredFamilies = {
+                "Inter",
+                "SF Pro Text",
+                "Segoe UI",
+                "Helvetica Neue",
+                "Noto Sans",
+                "Roboto",
+                "Arial",
+                "SansSerif"
+        };
+
+        Set<String> availableFamilies = new HashSet<>();
+        for (String family : GraphicsEnvironment.getLocalGraphicsEnvironment().getAvailableFontFamilyNames()) {
+            availableFamilies.add(family);
+        }
+
+        for (String preferredFamily : preferredFamilies) {
+            if (availableFamilies.contains(preferredFamily)) {
+                return new Font(preferredFamily, Font.PLAIN, 13);
+            }
+        }
+
+        return new Font(Font.SANS_SERIF, Font.PLAIN, 13);
     }
 
     public static Border paddedLineBorder() {

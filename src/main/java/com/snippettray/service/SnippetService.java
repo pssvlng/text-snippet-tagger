@@ -46,6 +46,14 @@ public final class SnippetService {
         repository.deleteSnippet(snippetId);
     }
 
+    public List<Integer> getSnippetTagIds(int snippetId) throws SQLException {
+        return repository.getSnippetTagIds(snippetId);
+    }
+
+    public void updateSnippet(int snippetId, String title, String content, List<Integer> tagIds) throws SQLException {
+        repository.updateSnippet(snippetId, title, content, tagIds);
+    }
+
     public Path getDatabasePath() {
         return databaseManager.getDatabasePath();
     }

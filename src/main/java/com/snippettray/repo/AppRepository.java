@@ -9,7 +9,9 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 public final class AppRepository {
     private final Connection connection;
@@ -189,6 +191,87 @@ public final class AppRepository {
         try (PreparedStatement statement = connection.prepareStatement("DELETE FROM snippets WHERE id = ?")) {
             statement.setInt(1, snippetId);
             statement.executeUpdate();
+        }
+    }
+
+    public synchronized List<Integer> getSnippetTagIds(int snippetId) throws SQLException {
+        List<Integer> tagIds = new ArrayList<>();
+        try (PreparedStatement statement = connection.prepareStatement(
+                "SELECT tag_id FROM snippet_tags WHERE snippet_id = ? ORDER BY tag_id"
+        )) {
+            statement.setInt(1, snippetId);
+            try (ResultSet rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    tagIds.add(rs.getInt("tag_id"));
+                }
+            }
+        }
+        return tagIds;
+    }
+
+    public synchronized void updateSnippet(int snippetId, String title, String content, List<Integer> tagIds) throws SQLException {
+        String normalizedTitle = title == null ? null : title.trim();
+        if (normalizedTitle != null && normalizedTitle.isEmpty()) {
+            normalizedTitle = null;
+        }
+
+        String normalizedContent = content == null ? "" : content.strip();
+        if (normalizedContent.isEmpty()) {
+            throw new IllegalArgumentException("Snippet text must not be empty.");
+        }
+
+        Set<Integer> uniqueTagIds = new LinkedHashSet<>();
+        if (tagIds != null) {
+            uniqueTagIds.addAll(tagIds);
+        }
+
+        boolean originalAutoCommit = connection.getAutoCommit();
+        try {
+            connection.setAutoCommit(false);
+
+            try (PreparedStatement updateSnippet = connection.prepareStatement(
+                    "UPDATE snippets SET title = ?, content = ? WHERE id = ?"
+            )) {
+                if (normalizedTitle == null) {
+                    updateSnippet.setNull(1, java.sql.Types.VARCHAR);
+                } else {
+                    updateSnippet.setString(1, normalizedTitle);
+                }
+                updateSnippet.setString(2, normalizedContent);
+                updateSnippet.setInt(3, snippetId);
+
+                int rows = updateSnippet.executeUpdate();
+                if (rows == 0) {
+                    throw new SQLException("Snippet not found.");
+                }
+            }
+
+            try (PreparedStatement deleteLinks = connection.prepareStatement(
+                    "DELETE FROM snippet_tags WHERE snippet_id = ?"
+            )) {
+                deleteLinks.setInt(1, snippetId);
+                deleteLinks.executeUpdate();
+            }
+
+            if (!uniqueTagIds.isEmpty()) {
+                try (PreparedStatement insertLink = connection.prepareStatement(
+                        "INSERT OR IGNORE INTO snippet_tags(snippet_id, tag_id) VALUES (?, ?)"
+                )) {
+                    for (Integer tagId : uniqueTagIds) {
+                        insertLink.setInt(1, snippetId);
+                        insertLink.setInt(2, tagId);
+                        insertLink.addBatch();
+                    }
+                    insertLink.executeBatch();
+                }
+            }
+
+            connection.commit();
+        } catch (SQLException | RuntimeException exception) {
+            connection.rollback();
+            throw exception;
+        } finally {
+            connection.setAutoCommit(originalAutoCommit);
         }
     }
 }

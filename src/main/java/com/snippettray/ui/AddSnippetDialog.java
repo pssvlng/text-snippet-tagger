@@ -1,5 +1,6 @@
 package com.snippettray.ui;
 
+import com.snippettray.model.SnippetResult;
 import com.snippettray.model.Tag;
 import com.snippettray.service.SnippetService;
 
@@ -22,12 +23,18 @@ import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.FocusTraversalPolicy;
 import java.awt.Frame;
+import java.awt.FontMetrics;
 import java.awt.Window;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 public final class AddSnippetDialog extends JDialog {
+    private static final String ADD_DIALOG_TITLE = "Add Text Snippet";
+    private static final String EDIT_DIALOG_TITLE = "Edit Text Snippet";
+
     private static AddSnippetDialog instance;
 
     private final SnippetService service;
@@ -35,15 +42,17 @@ public final class AddSnippetDialog extends JDialog {
     private JTextArea snippetArea;
     private JList<Tag> tagsList;
     private DefaultListModel<Tag> tagsModel;
+    private JButton saveButton;
+    private Integer editingSnippetId;
 
     private AddSnippetDialog(Frame parent, SnippetService service) {
-        super(parent, "Add Text Snippet", true);
+        super(parent, ADD_DIALOG_TITLE, true);
         this.service = service;
         initialize();
     }
 
     private AddSnippetDialog(Dialog parent, SnippetService service) {
-        super(parent, "Add Text Snippet", true);
+        super(parent, ADD_DIALOG_TITLE, true);
         this.service = service;
         initialize();
     }
@@ -100,10 +109,11 @@ public final class AddSnippetDialog extends JDialog {
         content.add(center, BorderLayout.CENTER);
         content.add(right, BorderLayout.EAST);
 
-        JButton saveButton = new JButton("Save Snippet");
+        saveButton = new JButton("Save Snippet");
         JButton cancelButton = new JButton("Close");
         UiStyle.styleButton(saveButton);
         UiStyle.styleButton(cancelButton);
+        ensureSaveButtonWidth();
         saveButton.addActionListener(e -> saveSnippet());
         cancelButton.addActionListener(e -> setVisible(false));
 
@@ -123,27 +133,63 @@ public final class AddSnippetDialog extends JDialog {
     }
 
     public static void showDialog(Window parent, SnippetService service) {
-        Window currentOwner = instance == null ? null : instance.getOwner();
-        if (instance == null || currentOwner != parent) {
-            if (instance != null) {
-                instance.dispose();
-            }
+        ensureInstance(parent, service);
+        instance.openForCreate(parent);
+    }
 
-            if (parent instanceof Dialog dialogParent) {
-                instance = new AddSnippetDialog(dialogParent, service);
-            } else {
-                instance = new AddSnippetDialog((Frame) parent, service);
-            }
+    public static void showEditDialog(
+            Window parent,
+            SnippetService service,
+            SnippetResult snippetResult,
+            List<Integer> selectedTagIds
+    ) {
+        ensureInstance(parent, service);
+        instance.openForEdit(parent, snippetResult, selectedTagIds);
+    }
+
+    private static void ensureInstance(Window parent, SnippetService service) {
+        Window currentOwner = instance == null ? null : instance.getOwner();
+        if (instance != null && currentOwner == parent && instance.service == service) {
+            return;
         }
 
+        if (instance != null) {
+            instance.dispose();
+        }
+
+        if (parent instanceof Dialog dialogParent) {
+            instance = new AddSnippetDialog(dialogParent, service);
+        } else {
+            instance = new AddSnippetDialog((Frame) parent, service);
+        }
+    }
+
+    private void openForCreate(Window parent) {
         instance.refreshTags();
         instance.titleField.setText("");
         instance.snippetArea.setText("");
         instance.tagsList.clearSelection();
+        instance.editingSnippetId = null;
+        instance.setTitle(ADD_DIALOG_TITLE);
+        instance.saveButton.setText("Save Snippet");
         instance.titleField.requestFocusInWindow();
         instance.setLocationRelativeTo(parent);
         instance.toFront();
         instance.setVisible(true);
+    }
+
+    private void openForEdit(Window parent, SnippetResult snippetResult, List<Integer> selectedTagIds) {
+        refreshTags();
+        editingSnippetId = snippetResult.id();
+        setTitle(EDIT_DIALOG_TITLE);
+        saveButton.setText("Save Changes");
+        titleField.setText(snippetResult.title() == null ? "" : snippetResult.title());
+        snippetArea.setText(snippetResult.content() == null ? "" : snippetResult.content());
+        selectTagIds(selectedTagIds);
+        titleField.requestFocusInWindow();
+        setLocationRelativeTo(parent);
+        toFront();
+        setVisible(true);
     }
 
     private void installKeyboardSupport(JButton newTagButton, JButton saveButton, JButton closeButton) {
@@ -177,6 +223,8 @@ public final class AddSnippetDialog extends JDialog {
     }
 
     private void createTagInline() {
+        Set<Integer> selectedTagIds = getSelectedTagIds();
+
         String value = (String) JOptionPane.showInputDialog(
                 this,
                 "Tag name:",
@@ -193,12 +241,8 @@ public final class AddSnippetDialog extends JDialog {
         try {
             int createdTagId = service.addTag(value);
             refreshTags();
-            for (int i = 0; i < tagsModel.size(); i++) {
-                if (tagsModel.get(i).id() == createdTagId) {
-                    tagsList.addSelectionInterval(i, i);
-                    break;
-                }
-            }
+            selectedTagIds.add(createdTagId);
+            selectTagIds(selectedTagIds);
         } catch (Exception exception) {
             JOptionPane.showMessageDialog(this, exception.getMessage(), "Unable to create tag", JOptionPane.ERROR_MESSAGE, AppAssets.appImageIcon());
         }
@@ -208,19 +252,60 @@ public final class AddSnippetDialog extends JDialog {
         String title = titleField.getText();
         String content = snippetArea.getText();
 
-        List<Integer> selectedTagIds = new ArrayList<>();
+        List<Integer> selectedTagIds = new ArrayList<>(getSelectedTagIds());
+
+        try {
+            if (editingSnippetId == null) {
+                service.addSnippet(title, content, selectedTagIds);
+                JOptionPane.showMessageDialog(this, "Text snippet saved.", "Success", JOptionPane.INFORMATION_MESSAGE, AppAssets.appImageIcon());
+                titleField.setText("");
+                snippetArea.setText("");
+                tagsList.clearSelection();
+                return;
+            }
+
+            service.updateSnippet(editingSnippetId, title, content, selectedTagIds);
+            JOptionPane.showMessageDialog(this, "Text snippet updated.", "Updated", JOptionPane.INFORMATION_MESSAGE, AppAssets.appImageIcon());
+            setVisible(false);
+        } catch (Exception exception) {
+            JOptionPane.showMessageDialog(this, exception.getMessage(), "Unable to save snippet", JOptionPane.ERROR_MESSAGE, AppAssets.appImageIcon());
+        }
+    }
+
+    private void ensureSaveButtonWidth() {
+        FontMetrics fontMetrics = saveButton.getFontMetrics(saveButton.getFont());
+        int longestTextWidth = Math.max(
+                fontMetrics.stringWidth("Save Snippet"),
+                fontMetrics.stringWidth("Save Changes")
+        );
+
+        java.awt.Insets insets = saveButton.getInsets();
+        int targetWidth = longestTextWidth + insets.left + insets.right + 8;
+        java.awt.Dimension preferred = saveButton.getPreferredSize();
+        saveButton.setPreferredSize(new java.awt.Dimension(Math.max(preferred.width, targetWidth), preferred.height));
+    }
+
+    private Set<Integer> getSelectedTagIds() {
+        Set<Integer> selectedTagIds = new LinkedHashSet<>();
         for (Tag tag : tagsList.getSelectedValuesList()) {
             selectedTagIds.add(tag.id());
         }
+        return selectedTagIds;
+    }
 
-        try {
-            service.addSnippet(title, content, selectedTagIds);
-            JOptionPane.showMessageDialog(this, "Text snippet saved.", "Success", JOptionPane.INFORMATION_MESSAGE, AppAssets.appImageIcon());
-            titleField.setText("");
-            snippetArea.setText("");
-            tagsList.clearSelection();
-        } catch (Exception exception) {
-            JOptionPane.showMessageDialog(this, exception.getMessage(), "Unable to save snippet", JOptionPane.ERROR_MESSAGE, AppAssets.appImageIcon());
+    private void selectTagIds(Iterable<Integer> tagIds) {
+        Set<Integer> selected = new LinkedHashSet<>();
+        for (Integer tagId : tagIds) {
+            if (tagId != null) {
+                selected.add(tagId);
+            }
+        }
+
+        tagsList.clearSelection();
+        for (int i = 0; i < tagsModel.size(); i++) {
+            if (selected.contains(tagsModel.get(i).id())) {
+                tagsList.addSelectionInterval(i, i);
+            }
         }
     }
 

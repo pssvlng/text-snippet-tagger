@@ -79,6 +79,7 @@ Both launch scripts verify that `java` is available on `PATH` and show a GUI pop
 ## Notes
 
 - If the execution directory is not writable, startup fails with an error message.
-- On Linux/macOS desktop environments without system tray support, the app cannot run as tray app.
+- On desktop environments without system tray support (for example, some GNOME setups), the app starts in a fallback window mode with the same core actions.
 - Data is persisted in `snippet_tray.db` and is not deleted on app close/restart.
 - Launch scripts intentionally avoid `clean` builds to prevent accidental deletion of the DB in development workflows.
+- All iconography and visual elements are handcrafted or AI-generated.
