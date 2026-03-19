@@ -34,7 +34,9 @@ import java.awt.FocusTraversalPolicy;
 import java.awt.Frame;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
+import java.awt.Toolkit;
 import java.awt.Window;
+import java.awt.datatransfer.StringSelection;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
@@ -49,7 +51,10 @@ public final class SearchWindow extends JDialog {
     private static final int ACTION_ICON_SIZE = 12;
     private static final int ACTION_ICON_GAP = 8;
     private static final int ACTION_ICON_PADDING = 4;
-    private static final int ACTIONS_ICON_WIDTH = ACTION_ICON_SIZE * 2 + ACTION_ICON_GAP + ACTION_ICON_PADDING * 2;
+        private static final int ACTIONS_ICON_COUNT = 3;
+        private static final int ACTIONS_ICON_WIDTH = ACTION_ICON_SIZE * ACTIONS_ICON_COUNT
+            + ACTION_ICON_GAP * (ACTIONS_ICON_COUNT - 1)
+            + ACTION_ICON_PADDING * 2;
     private static final int ACTIONS_ICON_HEIGHT = ACTION_ICON_SIZE + ACTION_ICON_PADDING * 2;
     private static final int ACTIONS_COLUMN_WIDTH = ACTIONS_ICON_WIDTH + 20;
     private static final Icon ACTIONS_ICON = createActionsIcon();
@@ -156,7 +161,11 @@ public final class SearchWindow extends JDialog {
                     return null;
                 }
                 if (column == ACTIONS_COLUMN_INDEX) {
-                    return isDeleteActionClick(event) ? "Delete snippet" : "Edit snippet";
+                    return switch (resolveActionAt(event)) {
+                        case DELETE -> "Delete snippet";
+                        case COPY -> "Copy snippet";
+                        default -> "Edit snippet";
+                    };
                 }
                 return null;
             }
@@ -235,11 +244,11 @@ public final class SearchWindow extends JDialog {
                     return;
                 }
                 if (column == ACTIONS_COLUMN_INDEX) {
-                    if (isDeleteActionClick(event)) {
-                        deleteSnippetAt(row);
-                        return;
+                    switch (resolveActionAt(event)) {
+                        case DELETE -> deleteSnippetAt(row);
+                        case COPY -> copySnippetAt(row);
+                        default -> editSnippetAt(row);
                     }
-                    editSnippetAt(row);
                 }
             }
         });
@@ -400,19 +409,61 @@ public final class SearchWindow extends JDialog {
         return singleLine.substring(0, 90) + "…";
     }
 
-    private boolean isDeleteActionClick(MouseEvent event) {
+    private ActionType resolveActionAt(MouseEvent event) {
         int row = resultsTable.rowAtPoint(event.getPoint());
         int column = resultsTable.columnAtPoint(event.getPoint());
         if (row < 0 || column != ACTIONS_COLUMN_INDEX) {
-            return false;
+            return ActionType.NONE;
         }
 
         java.awt.Rectangle cell = resultsTable.getCellRect(row, column, false);
         int xInCell = event.getX() - cell.x;
         int iconsStartX = Math.max((cell.width - ACTIONS_ICON_WIDTH) / 2, 0);
-        int deleteStartX = iconsStartX + ACTION_ICON_PADDING + ACTION_ICON_SIZE + ACTION_ICON_GAP;
+        int editStartX = iconsStartX + ACTION_ICON_PADDING;
+        int editEndX = editStartX + ACTION_ICON_SIZE;
+        if (xInCell >= editStartX && xInCell <= editEndX) {
+            return ActionType.EDIT;
+        }
+
+        int deleteStartX = editEndX + ACTION_ICON_GAP;
         int deleteEndX = deleteStartX + ACTION_ICON_SIZE;
-        return xInCell >= deleteStartX && xInCell <= deleteEndX;
+        if (xInCell >= deleteStartX && xInCell <= deleteEndX) {
+            return ActionType.DELETE;
+        }
+
+        int copyStartX = deleteEndX + ACTION_ICON_GAP;
+        int copyEndX = copyStartX + ACTION_ICON_SIZE;
+        if (xInCell >= copyStartX && xInCell <= copyEndX) {
+            return ActionType.COPY;
+        }
+
+        return ActionType.NONE;
+    }
+
+    private void copySnippetAt(int row) {
+        if (row < 0 || row >= currentResults.size()) {
+            return;
+        }
+
+        try {
+            String content = currentResults.get(row).content();
+            Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(content), null);
+            JOptionPane.showMessageDialog(
+                    this,
+                    "Text snippet copied to clipboard.",
+                    "Copied",
+                    JOptionPane.INFORMATION_MESSAGE,
+                    AppAssets.appImageIcon()
+            );
+        } catch (IllegalStateException | SecurityException exception) {
+            JOptionPane.showMessageDialog(
+                    this,
+                    "Unable to copy text snippet to clipboard.",
+                    "Copy Failed",
+                    JOptionPane.ERROR_MESSAGE,
+                    AppAssets.appImageIcon()
+            );
+        }
     }
 
     private static Icon createActionsIcon() {
@@ -427,6 +478,9 @@ public final class SearchWindow extends JDialog {
 
         int deleteX = ACTION_ICON_PADDING + ACTION_ICON_SIZE + ACTION_ICON_GAP;
         drawDeleteIcon(graphics, deleteX, iconTop);
+
+        int copyX = deleteX + ACTION_ICON_SIZE + ACTION_ICON_GAP;
+        drawCopyIcon(graphics, copyX, iconTop);
 
         graphics.dispose();
         return new ImageIcon(image);
@@ -453,6 +507,20 @@ public final class SearchWindow extends JDialog {
         graphics.drawLine(x + 5, y + 2, x + ACTION_ICON_SIZE - 5, y + 2);
         graphics.drawLine(x + 6, y + 6, x + 6, y + ACTION_ICON_SIZE - 2);
         graphics.drawLine(x + ACTION_ICON_SIZE - 6, y + 6, x + ACTION_ICON_SIZE - 6, y + ACTION_ICON_SIZE - 2);
+    }
+
+    private static void drawCopyIcon(Graphics2D graphics, int x, int y) {
+        graphics.setColor(new Color(74, 98, 140));
+        graphics.setStroke(new BasicStroke(1.5f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        graphics.drawRoundRect(x + 2, y + 4, ACTION_ICON_SIZE - 6, ACTION_ICON_SIZE - 6, 2, 2);
+        graphics.drawRoundRect(x + 4, y + 2, ACTION_ICON_SIZE - 6, ACTION_ICON_SIZE - 6, 2, 2);
+    }
+
+    private enum ActionType {
+        NONE,
+        EDIT,
+        DELETE,
+        COPY
     }
 
     private static final class OrderedFocusTraversalPolicy extends FocusTraversalPolicy {
